@@ -1,0 +1,20 @@
+# 1. 初始化
+mkdir my-app&&cd my-app
+npm init-y
+npm安装@capacitor/core@capacitor/cli@capacitor/android
+
+#2.初始化电容器(App名和包名一次定好，别乱改）
+npx cap init"你的应用名""com.你的名字.AppName"
+
+#3.把HTML放进www/，确保主文件叫index.html
+mkdir www
+#把你的HTML放进去
+
+# 4. 添加安卓平台
+npx帽添加安卓
+
+#5.同步+打开Android Studio
+npx上限同步
+npx cap open android
+
+#6.在Android Studio里：构建→生成带符号的捆绑包/APK→APK
