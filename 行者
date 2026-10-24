@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>江湖行 · 文字冒险</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #1a1613; color: #e8dcc8;
+    font-family: "Songti SC", "SimSun", serif;
+    display: flex; justify-content: center; min-height: 100vh;
+  }
+  #app { width: 100%; max-width: 560px; padding: 16px; display: flex; flex-direction: column; }
+  .stats {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+    font-size: 13px; background: #26201a; border: 1px solid #3d3328;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+  }
+  .stats span { color: #b8a88a; }
+  .stats b { color: #f0e6d2; }
+  #story {
+    flex: 1; background: #211c17; border: 1px solid #3d3328;
+    border-radius: 8px; padding: 16px; line-height: 1.8;
+    font-size: 15px; white-space: pre-wrap; min-height: 240px;
+  }
+  #choices { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  button {
+    width: 100%; padding: 12px; background: #332a21; color: #e8dcc8;
+    border: 1px solid #4a3d2e; border-radius: 8px; font-size: 14px;
+    font-family: inherit; cursor: pointer; text-align: left; transition: background .15s;
+  }
+  button:hover { background: #44382b; }
+  button:active { background: #55452f; }
+  .danger { border-color: #7a3b2e; color: #f0b8a0; }
+  .good { border-color: #3d5a3a; color: #b8e0a8; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="stats" id="stats"></div>
+  <div id="story"></div>
+  <div id="choices"></div>
+</div>
+<script>
+const S = {
+  day: 1, maxDay: 30,
+  hp: 100, maxHp: 100,
+  atk: 5, money: 20,
+  karma: 0,
+  dead: false, over: false
+};
+
+const storyEl = document.getElementById('story');
+const choicesEl = document.getElementById('choices');
+const statsEl = document.getElementById('stats');
+
+function renderStats() {
+  statsEl.innerHTML = `
+    <div><span>第 </span><b>${Math.min(S.day, S.maxDay)}</b><span> / ${S.maxDay} 天</span></div>
+    <div><span>气血 </span><b>${Math.max(0, S.hp)}</b><span> / ${S.maxHp}</span></div>
+    <div><span>武力 </span><b>${S.atk}</b></div>
+    <div><span>银两 </span><b>${S.money}</b></div>
+    <div><span>侠义 </span><b>${S.karma}</b></div>
+  `;
+}
+
+function show(text, choices) {
+  storyEl.textContent = text;
+  choicesEl.innerHTML = '';
+  choices.forEach(c => {
+    const b = document.createElement('button');
+    b.textContent = c.label;
+    if (c.cls) b.className = c.cls;
+    b.onclick = c.fn;
+    choicesEl.appendChild(b);
+  });
+  renderStats();
+}
+
+function nextDay() {
+  if (S.dead || S.over) return;
+  if (S.hp <= 0) { die(); return; }
+  S.day++;
+  if (S.day > S.maxDay) { ending(); return; }
+  S.hp -= 2;
+  if (S.hp <= 0) { die(`第 ${S.day} 天，你饥寒交迫，倒在了路边。`); return; }
+  renderStats();
+  rollEvent();
+}
+
+function die(msg) {
+  S.dead = true;
+  show(msg || '你倒下了。江湖路远，从此再无人记得你的名字。', [
+    { label: '重来一世', fn: resetGame, cls: 'good' }
+  ]);
+}
+
+function ending() {
+  S.over = true;
+  let title, text;
+  if (S.karma >= 20 && S.atk >= 15) {
+    title = '一代大侠';
+    text = '三十日后，江湖上开始流传你的名字。你仗剑天涯，路见不平，成为无数少年仰望的传说。';
+  } else if (S.money >= 150) {
+    title = '一方富商';
+    text = '你攒下了一份家业，在江南开了间铺子，从此不问刀光剑影。';
+  } else if (S.karma <= -10) {
+    title = '江湖恶客';
+    text = '你行事狠辣，仇家遍地。三十日后，你仍在逃亡的路上。';
+  } else {
+    title = '平凡路人';
+    text = '三十日过去，你还是那个你。江湖很大，你只是路过。';
+  }
+  show(`—— 第 ${S.maxDay} 天 ——\n\n【${title}】\n\n${text}\n\n最终：气血 ${Math.max(0,S.hp)}，武力 ${S.atk}，银两 ${S.money}，侠义 ${S.karma}`, [
+    { label: '再走一遭', fn: resetGame, cls: 'good' }
+  ]);
+}
+
+function resetGame() {
+  S.day = 1; S.hp = 100; S.maxHp = 100; S.atk = 5;
+  S.money = 20; S.karma = 0; S.dead = false; S.over = false;
+  startGame();
+}
+
+function fight(enemyAtk, rewardMoney, rewardKarma, name) {
+  const p = Math.min(0.9, 0.45 + (S.atk - enemyAtk) * 0.06);
+  if (Math.random() < p) {
+    S.money += rewardMoney;
+    S.karma += rewardKarma;
+    const hurt = Math.floor(Math.random() * 8);
+    S.hp -= hurt;
+    show(`你与${name}缠斗数合，一剑将其击退！\n搜得银两 ${rewardMoney} 两。${hurt ? '你受了点轻伤。' : '毫发无伤。'}`, [
+      { label: '继续赶路', fn: nextDay }
+    ]);
+  } else {
+    const dmg = 15 + Math.floor(Math.random() * 15);
+    S.hp -= dmg;
+    show(`你与${name}交手，落了下风，被砍伤（-${dmg} 气血），狼狈逃开。`, [
+      { label: '逃命', fn: nextDay }
+    ]);
+  }
+}
+
+function eventBandit() {
+  show('山路转弯处，三个山贼拦住去路。\n"此山是我开，此树是我栽——留下买路财！"', [
+    { label: '拔剑硬拼', fn: () => fight(3, 25, 3, '山贼头目') },
+    { label: '扔下十两银子走人', fn: () => {
+      if (S.money >= 10) {
+        S.money -= 10;
+        show('你扔下银子，山贼让开了路。', [{ label: '继续赶路', fn: nextDay }]);
+      } else {
+        show('你摸遍全身，一个铜板也没有。山贼恼羞成怒，扑了上来。', [
+          { label: '只能动手', fn: () => fight(3, 25, 3, '山贼头目') }
+        ]);
+      }
+    }},
+    { label: '假装是官府的人（赌一把）', fn: () => {
+      if (Math.random() < 0.6) {
+        S.karma += 1;
+        show('你挺直腰板，厉声道："大胆！官府办案，还不快滚！"\n山贼面面相觑，落荒而逃。', [{ label: '继续赶路', fn: nextDay }]);
+      } else {
+        S.hp -= 10;
+        show('山贼识破了你的把戏，一拥而上。你挨了几拳才逃出来。（-10 气血）', [{ label: '负伤前行', fn: nextDay }]);
+      }
+    }}
+  ]);
+}
+
+function eventWolf() {
+  show('林中窜出一头饿狼，绿着眼睛盯着你。', [
+    { label: '迎上去搏斗', fn: () => fight(2, 0, 0, '饿狼') },
+    { label: '爬树躲避', fn: () => {
+      if (Math.random() < 0.7) {
+        show('你手脚并用爬上树，饿狼在树下转了几圈，走了。', [{ label: '下树赶路', fn: nextDay }]);
+      } else {
+        const d = 8 + Math.floor(Math.random() * 8);
+        S.hp -= d;
+        show(`你爬得太慢，被狼咬住小腿（-${d} 气血）。`, [{ label: '挣扎脱身', fn: nextDay }]);
+      }
+    }}
+  ]);
+}
+
+function eventBeggar() {
+  show('街角躺着个衣衫褴褛的老乞丐，伸手向你要钱。', [
+    { label: '给他十两银子', fn: () => {
+      if (S.money < 10) {
+        show('你摸了摸口袋，尴尬地发现钱不够。老乞丐摆摆手，没说什么。', [{ label: '离开', fn: nextDay }]);
+        return;
+      }
+      S.money -= 10;
+      if (Math.random() < 0.5) {
+        S.atk += 3; S.karma += 5;
+        show('老乞丐咧嘴一笑，塞给你一本破旧的拳谱："小子，心肠不错。"\n你翻开一看，竟是失传的招式。（武力 +3，侠义 +5）', [{ label: '拜谢', fn: nextDay }]);
+      } else {
+        S.karma += 5;
+        show('老乞丐连声道谢，说日后必有回报。你没太当真。', [{ label: '离开', fn: nextDay }]);
+      }
+    }},
+{标签：'不理他，径直走开'，FN：()=>{
+S.karma-=2；
+show('你从老乞丐身边走过，身后传来一声长长的叹息.'，[{标签：'继续走'，FN:onderday}])；
+    }}
+  ]);
+}
+
+函数eventMarket(){
+  show('镇上集市热闹。有个货郎在卖药，铁匠铺里挂着一把好剑。', [
+{标签：'买伤药（15两，回30气血）'，FN：()=>{
+if(S.money<15){
+show('你数了数银子，不够.货郎白了你一眼。'，[{标签：'离开'，FN:onderday}])；
+返回；
+      }
+S.money-=15；S.hp=Math.min(S.maxHp，S.hp+30)；
+show('你服下伤药，血气恢复了不少.'，[{标签：'继续逛'，FN:onderday}])；
+    }},
+{标签：'买好剑(50两，武力+3)'，fn：()=>{
+if(S.money<50){
+show('铁匠摇摇头："没钱就别看剑."'，[{标签：'离开'，FN:onderday}])；
+返回；
+      }
+S.money-=50；S.ATK+=3；
+show('你掂了掂新剑，手感不错.(武力+3)'，[{label：'离开'，FN:onderday}])；
+    }},
+{标签：'什么都不买，走'，FN:onderday}
+  ]);
+}
+
+函数eventDice(){
+  show('赌坊里人声鼎沸，庄家摇着骰子："买大买小，买定离手！"', [
+{label：'押十两（赌运气）'，fn：()=>{
+if(S.money<10){
+show('你连投注的钱都没有，被伙计轰了出来.'，[{标签：'离开'，FN:onderday}])；
+返回；
+      }
+S.money-=10；
+if(Math.random()<0.45){
+s.money+=30；
+show('骰子一开，你赢了！三十两银子入手。'，[{标签：'见好就收'，FN:onderday}])；
+}else{
+show('骰子一开，你输了.十两银子打了水漂。'，[{标签：'离开'，FN:onderday}])；
+      }
+    }},
+{标签：'看看就走'，FN:onderday}
+  ]);
+}
+
+函数eventInn(){
+  show('天色已晚，前面有家悦来客栈，灯笼在风里晃。', [
+{label：'住店（20两，回满气血）'，fn：()=>{
+if(S.money<20){
+show('掌柜的把你上下打量一番："没钱住什么店？"'，[
+{标签：'露宿街头'，FN：()=>{S.hp-=5；下一天()；}}
+        ]);
+返回；
+      }
+S.money-=20；S.hp=S.maxHp；
+show('你睡了个好觉，第二天精神抖擞.'，[{标签：'上路'，FN:onderday}])；
+    }},
+{标签：'在屋檐下将就一晚'，FN：()=>{
+      S.hp -= 5;
+show('夜里寒风刺骨，你缩在墙角，睡得并不踏实.（-5气血）'，[{标签：'天亮上路'，FN:onderday}])；
+    }}
+  ]);
+}
+
+函数eventOldMan(){
+  show('一位白发老者坐在桥头，见你路过，招手道："后生，可愿听老夫讲个故事？"', [
+{标签：'坐下听'，FN：()=>{
+S.ATK+=2；
+老者讲了半炷香的江湖旧事，末了点疏你几句武学道理。你似有所悟。(武力+2)'，[{label：'拜谢老人'，FN:onderday}])；
+    }},
+{标签：'赶路要紧'，FN:onderday}
+  ]);
+}
+
+函数eventSave(){
+  show('河边有个孩子落水，岸上母亲哭喊着救命。', [
+{标签：'跳下去救人'，FN：()=>{
+S.hp-=8；S.karma+=8；
+show('你奋力把孩子托上岸，自己呛了几口水.(-8血气，侠义+8)\n那母亲跪地磕头，你连忙扶起.'，[{标签：'离开'，FN:onderday}])；
+    }},
+{标签：'不敢下水，走开'，FN：()=>{
+S.karma-=5；
+show('你转身离开，身后的哭喊声渐渐远了.'，[{标签：'继续走'，FN:onderday}])；
+    }}
+  ]);
+}
+
+函数eventPurse(){
+  show('路边草丛里躺着个钱袋，鼓鼓囊囊。', [
+{标签：'捡起来收好'，FN：()=>{
+Const m=10+Math.floor(Math.random()*30)；
+S.money+=m；S.karma-=1；
+show('你左右看看没人，把钱袋揣进怀里.(银两+${m})'，[{label：'快步离开'，FN:onderday}])；
+    }},
+{标签：'在原地等失主'，FN：()=>{
+      if (Math.random() < 0.5) {
+S.karma+=5；S.money+=20；
+show('不多时，一个商人焦急地寻来.你归还钱袋，他硬塞给你二十两谢银。(侠义+5)'，[{label：'告辞'，FN:onderday}])；
+}else{
+show('你等了半个时辰，没人来.只好把袋子挂在显眼的树杈上，走了。'，[{标签：'离开'，FN:onderday}])；
+      }
+    }}
+  ]);
+}
+
+函数eventDuel(){
+  show('路上遇到个背剑的年轻人，拱手道："这位兄台，可愿切磋一二？"', [
+{标签：'应战'，FN：()=>{
+if(S.ATK>=8){
+S.ATK+=1；S.karma+=2；
+show('你们拆了三十余招，他不敌认输，抱拳道："受教了."(武力+1)'，[{label：'拱手告别'，FN:onderday}])；
+}else{
+        S.hp -= 10;
+}else{
+      }
+    }},
+{标签：'婉拒'，FN:onderday}
+  ]);
+}
+
+函数eventTrap(){
+  show('山道上横着一根不起眼的绳子，你隐约觉得不对。', [
+{标签：'小心绕过'，FN：()=>{
+show('你绕开绳子，继续前行.'，[{标签：'走'，FN:onderday}]])；
+    }},
+{标签：'大步跨过去'，FN：()=>{
+      if (Math.random() < 0.5) {
+        S.hp -= 12;
+show('绳子一紧，几支竹箭射来！你躲闪不及，中了一箭。（-12气血）'，[{标签：'包扎伤口'，FN:onderday}])；
+}else{
+show('你一跃而过，什么也没发生.'，[{标签：'继续走'，FN:onderday}]]])；
+      }
+    }}
+  ]);
+}
+
+函数eventOfficial(){
+  show('城门口贴着悬赏告示：捉拿采花贼一名，赏银五十两。', [
+{标签：'去后山搜捕（武力判定）'，FN：()=>{
+if(S.ATK>=10){
+S.money+=50；S.karma+=10；S.hp-=10；
+show('你在后山与采花贼恶斗一场，将其制服.（银两+50，侠义+10，-10气血）'，[{标签：'领赏'，FN:onderday}])；
+}else{
+        S.hp -= 15;
+show('你不是那贼人的对手，被打伤逃走.(-15血气)'，[{标签：'疗伤'，FN:onderday}])；
+      }
+    }},
+{标签：'不关我事'，FN:onderday}
+  ]);
+}
+
+常数事件=[
+eventBandit，eventWolf，eventBeggar，eventMarket，eventDice，eventInn，
+eventOldMan、eventSave、eventPurse、eventDuel、eventTrap、eventOfficial
+];
+
+函数rollEvent(){
+事件[Math.floor(Math.random()*events.length)]()；
+}
+
+函数StartGame(){
+显示(
+    '暮色四合，你从一座破庙里醒来，身上只有二十两碎银和一把卷了刃的旧剑。\n\n你叫无名，今年十八，听说三十日后少林寺要开英雄大会，天下英雄都会去。\n\n这一路，往西。',
+[{标签：'起身赶路'，FN:onderday}]
+  );
+}
+
+StartGame()；
+</script>
+</body>
+</html>
